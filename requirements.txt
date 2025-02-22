@@ -1,0 +1,6 @@
+python==3.10
+torch==2.6.0+cu126
+torchvision==0.21.0+cu126
+torchaudio==2.6.0+cu126
+numpy==2.1.2
+tqdm==4.67.1
