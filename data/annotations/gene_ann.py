@@ -47,12 +47,18 @@ def extract_bounding_boxes(segmentation_path, csv_path, target_classes, min_area
     annotations = []
     
     # Iterate over each target RGB value and create a binary mask
+    combined_mask = np.zeros([720, 960])
     for rgb, new_class in rgb_mapping.items():
         r_val, g_val, b_val = rgb
         # Create binary mask where pixels exactly match the RGB value
-        mask = ((seg[:, :, 0] == r_val) & 
+        matched_mask = ((seg[:, :, 0] == r_val) & 
                 (seg[:, :, 1] == g_val) & 
-                (seg[:, :, 2] == b_val)).astype(np.uint8) * 255
+                (seg[:, :, 2] == b_val))
+        
+        # Combine masks together, ignore rest classes
+        combined_mask[matched_mask] = new_class
+
+        mask = matched_mask.astype(np.uint8) * 255
         
         # Find contours in the mask (external contours)
         contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
@@ -67,6 +73,15 @@ def extract_bounding_boxes(segmentation_path, csv_path, target_classes, min_area
                 'iscrowd': 0
             }
             annotations.append(annotation)
+
+    # Save the mask
+    filename = os.path.basename(segmentation_path)
+    name_without_ext = os.path.splitext(filename)[0]
+    base_name = name_without_ext.split("_L")[0]
+    new_filename = base_name + "_M.png"
+    save_path = os.path.join('data/annotations/val', new_filename)
+    cv2.imwrite(save_path, combined_mask.astype(np.uint8))
+
     return annotations
 
 def visualize_bbox(image_path, anns, target_classes):
@@ -150,26 +165,16 @@ def create_coco_json(image_dir, segmentation_dir, csv_path, target_classes, outp
         json.dump(coco, f)
 
 if __name__ == "__main__":
-    image_dir = 'data/CamVid/train'
-    label_dir = 'data/CamVid/train_labels'
+    image_dir = 'data/CamVid/val'
+    label_dir = 'data/CamVid/val_labels'
     csv_path = 'data/CamVid/class_dict.csv'
-    output_json = 'data/annotations/trian_anns.json'
-
-    # Gather all image filenames
-    image_filenames = sorted(
-        f for f in os.listdir(image_dir)
-        if f.endswith(".png") or f.endswith(".jpg")
-    )
-
-    label_filenames = sorted(
-        f for f in os.listdir(label_dir)
-        if f.endswith(".png") or f.endswith(".jpg")
-    )
+    output_json = 'data/annotations/val_anns.json'
 
     target_classes = {1: 'Car', 2: 'Pedestrian', 3: 'Bicyclist', 4: 'MotorcycleScooter', 5: 'Truck_Bus'}
 
     test_path = 'data/CamVid/train_labels/0001TP_009210_L.png'
+
     # anns = extract_bounding_boxes(test_path, csv_path, target_classes)
     # print(anns)
     # visualize_bbox(test_path, anns, target_classes)
-    create_coco_json(image_dir, label_dir, csv_path, target_classes, output_json)
+    # create_coco_json(image_dir, label_dir, csv_path, target_classes, output_json)
