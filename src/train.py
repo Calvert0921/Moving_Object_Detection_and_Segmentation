@@ -5,7 +5,7 @@ from tqdm import tqdm
 
 from model import MultiTaskModel
 from dataloader import get_dataloader
-from utils import iou_loss, compute_detection_loss, compute_map, generate_anchors
+from evaluate import iou_loss, compute_detection_loss, generate_anchors
 import torchvision.transforms as transforms
 
 ###########################################

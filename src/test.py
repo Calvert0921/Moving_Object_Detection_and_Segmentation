@@ -1,5 +1,3 @@
-# test.py
-
 import os
 import csv
 import torch
@@ -83,6 +81,21 @@ def color2label(color_img, mapping_inv):
     return label_img
 
 # ----------------------------
+# Compare Prediction and Ground Truth Segmentation
+# ----------------------------
+def compare_seg(pred, gt):
+    plt.figure(figsize=(10, 5))
+    plt.subplot(1, 2, 1)
+    plt.imshow(pred)
+    plt.title("Prediction")
+    plt.axis("off")
+    plt.subplot(1, 2, 2)
+    plt.imshow(gt)
+    plt.title("Ground Truth")
+    plt.axis("off")
+    plt.show()
+
+# ----------------------------
 # Test Procedure
 # ----------------------------
 def main():
@@ -114,8 +127,10 @@ def main():
     model.to(device)
     model.eval()
 
-    total_pixels = 0
-    correct_pixels = 0
+    # Initialize accumulators for IoU computation for classes 1-5 (ignore background)
+    # We use 6 slots so that index corresponds to class number (index 0 for background)
+    class_intersections = np.zeros(6, dtype=np.float32)
+    class_unions = np.zeros(6, dtype=np.float32)
 
     for img_file in test_image_files:
         # Load the original image
@@ -139,31 +154,34 @@ def main():
         gt_labels = color2label(gt_color, color_mapping_inv)
         # Optionally, convert the ground truth back to a color image for comparison
         gt_color_converted = label2color(gt_labels, color_mapping)
-        
-        # Calculate pixel-wise accuracy (comparing predicted labels with ground truth labels)
-        total_pixels += gt_labels.size
-        correct_pixels += (pred_labels == gt_labels).sum()
 
-        # Save the prediction and ground truth (converted color image) for visual comparison
-        pred_out = Image.fromarray(pred_color)
-        gt_out = Image.fromarray(gt_color_converted)
-        # pred_out.save(os.path.join(output_dir, f"pred_{img_file}"))
-        # gt_out.save(os.path.join(output_dir, f"gt_{img_file}"))
+        # Accumulate intersections and unions for each class (only classes 1-5)
+        for cls in range(1, 6):
+            pred_cls = (pred_labels == cls)
+            gt_cls = (gt_labels == cls)
+            intersection = np.logical_and(pred_cls, gt_cls).sum()
+            union = np.logical_or(pred_cls, gt_cls).sum()
+            class_intersections[cls] += intersection
+            class_unions[cls] += union
 
-        # Display the comparison using matplotlib
-        plt.figure(figsize=(10, 5))
-        plt.subplot(1, 2, 1)
-        plt.imshow(pred_color)
-        plt.title("Prediction")
-        plt.axis("off")
-        plt.subplot(1, 2, 2)
-        plt.imshow(gt_color_converted)
-        plt.title("Ground Truth")
-        plt.axis("off")
-        plt.show()
-    
-    accuracy = correct_pixels / total_pixels
-    print(f"Pixel-wise accuracy: {accuracy:.4f}")
+        # Show segmentation results
+        compare_seg(pred_color, gt_color_converted)
+
+    # Compute and print per-class IoU and average IoU (only for classes 1-5)
+    print("Per-class IoU (excluding background):")
+    iou_list = []
+    for cls in range(1, 6):
+        if class_unions[cls] > 0:
+            iou = class_intersections[cls] / class_unions[cls]
+            print(f"Class {cls}: IoU = {iou:.4f}")
+            iou_list.append(iou)
+        else:
+            print(f"Class {cls}: IoU = N/A (no samples)")
+    if iou_list:
+        average_iou = sum(iou_list) / len(iou_list)
+        print(f"Average IoU (classes 1-5): {average_iou:.4f}")
+    else:
+        print("No valid classes found for IoU calculation.")
 
 if __name__ == '__main__':
     main()
