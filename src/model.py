@@ -1,40 +1,38 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import torchvision.models as models
 
 # ---------------------------
-# Backbone: Custom CNN Encoder
+# Pretrained Backbone using ResNet50
 # ---------------------------
 class Backbone(nn.Module):
-    def __init__(self):
+    def __init__(self, pretrained=True):
         super(Backbone, self).__init__()
-        # Each block downsamples the input by a factor of 2.
-        self.conv1 = nn.Sequential(
-            nn.Conv2d(3, 64, kernel_size=3, stride=2, padding=1),  # (720,960) -> (360,480)
-            nn.BatchNorm2d(64),
-            nn.ReLU(inplace=True)
+        # Use a pretrained ResNet50.
+        # Set replace_stride_with_dilation=[False, False, True] so that layer4 uses dilated convolutions,
+        # which helps maintain a higher resolution feature map.
+        resnet = models.resnet50(pretrained=pretrained, replace_stride_with_dilation=[False, False, True])
+        # Initial layers: conv1, bn1, relu, and maxpool.
+        self.initial = nn.Sequential(
+            resnet.conv1,  # Output: (batch, 64, H/2, W/2)
+            resnet.bn1,
+            resnet.relu,
+            resnet.maxpool  # Output: (batch, 64, H/4, W/4)
         )
-        self.conv2 = nn.Sequential(
-            nn.Conv2d(64, 128, kernel_size=3, stride=2, padding=1),  # (360,480) -> (180,240)
-            nn.BatchNorm2d(128),
-            nn.ReLU(inplace=True)
-        )
-        self.conv3 = nn.Sequential(
-            nn.Conv2d(128, 256, kernel_size=3, stride=2, padding=1),  # (180,240) -> (90,120)
-            nn.BatchNorm2d(256),
-            nn.ReLU(inplace=True)
-        )
-        self.conv4 = nn.Sequential(
-            nn.Conv2d(256, 512, kernel_size=3, stride=2, padding=1),  # (90,120) -> (45,60)
-            nn.BatchNorm2d(512),
-            nn.ReLU(inplace=True)
-        )
+        # Subsequent layers.
+        self.layer1 = resnet.layer1  # Output: (batch, 256, H/4, W/4)
+        self.layer2 = resnet.layer2  # Output: (batch, 512, H/8, W/8)
+        self.layer3 = resnet.layer3  # Output: (batch, 1024, H/16, W/16)
+        # With dilation, layer4 does not further downsample the feature map.
+        self.layer4 = resnet.layer4  # Output: (batch, 2048, H/16, W/16)
         
     def forward(self, x):
-        x = self.conv1(x)  # Output: (batch, 64, 360, 480)
-        x = self.conv2(x)  # Output: (batch, 128, 180, 240)
-        x = self.conv3(x)  # Output: (batch, 256, 90, 120)
-        x = self.conv4(x)  # Output: (batch, 512, 45, 60)
+        x = self.initial(x)
+        x = self.layer1(x)
+        x = self.layer2(x)
+        x = self.layer3(x)
+        x = self.layer4(x)
         return x
 
 # ---------------------------
@@ -43,41 +41,41 @@ class Backbone(nn.Module):
 class SegmentationHead(nn.Module):
     def __init__(self, in_channels, num_classes=6):
         super(SegmentationHead, self).__init__()
-        # Four upsampling stages to recover the original resolution
+        # The input channels are 2048 from the ResNet50 backbone.
         self.up1 = nn.Sequential(
-            nn.Conv2d(in_channels, 256, kernel_size=3, padding=1),
-            nn.BatchNorm2d(256),
+            nn.Conv2d(in_channels, 512, kernel_size=3, padding=1),
+            nn.BatchNorm2d(512),
             nn.ReLU(inplace=True)
         )
         self.up2 = nn.Sequential(
+            nn.Conv2d(512, 256, kernel_size=3, padding=1),
+            nn.BatchNorm2d(256),
+            nn.ReLU(inplace=True)
+        )
+        self.up3 = nn.Sequential(
             nn.Conv2d(256, 128, kernel_size=3, padding=1),
             nn.BatchNorm2d(128),
             nn.ReLU(inplace=True)
         )
-        self.up3 = nn.Sequential(
+        self.up4 = nn.Sequential(
             nn.Conv2d(128, 64, kernel_size=3, padding=1),
             nn.BatchNorm2d(64),
             nn.ReLU(inplace=True)
         )
-        self.up4 = nn.Sequential(
-            nn.Conv2d(64, 32, kernel_size=3, padding=1),
-            nn.BatchNorm2d(32),
-            nn.ReLU(inplace=True)
-        )
-        # Final 1x1 convolution to produce segmentation logits for 6 classes.
-        self.conv_last = nn.Conv2d(32, num_classes, kernel_size=1)
+        # Final 1x1 convolution to produce logits for each class.
+        self.conv_last = nn.Conv2d(64, num_classes, kernel_size=1)
         
     def forward(self, x):
-        # x: (batch, 512, 45, 60)
-        x = F.interpolate(x, scale_factor=2, mode='bilinear', align_corners=False)  # (batch, 512, 90, 120)
-        x = self.up1(x)  # (batch, 256, 90, 120)
-        x = F.interpolate(x, scale_factor=2, mode='bilinear', align_corners=False)  # (batch, 256, 180, 240)
-        x = self.up2(x)  # (batch, 128, 180, 240)
-        x = F.interpolate(x, scale_factor=2, mode='bilinear', align_corners=False)  # (batch, 128, 360, 480)
-        x = self.up3(x)  # (batch, 64, 360, 480)
-        x = F.interpolate(x, scale_factor=2, mode='bilinear', align_corners=False)  # (batch, 64, 720, 960)
-        x = self.up4(x)  # (batch, 32, 720, 960)
-        x = self.conv_last(x)  # (batch, 6, 720, 960)
+        # Assume input x has shape (batch, 2048, 45, 60)
+        x = F.interpolate(x, scale_factor=2, mode='bilinear', align_corners=False)  # -> (batch, 2048, 90, 120)
+        x = self.up1(x)  # -> (batch, 512, 90, 120)
+        x = F.interpolate(x, scale_factor=2, mode='bilinear', align_corners=False)  # -> (batch, 512, 180, 240)
+        x = self.up2(x)  # -> (batch, 256, 180, 240)
+        x = F.interpolate(x, scale_factor=2, mode='bilinear', align_corners=False)  # -> (batch, 256, 360, 480)
+        x = self.up3(x)  # -> (batch, 128, 360, 480)
+        x = F.interpolate(x, scale_factor=2, mode='bilinear', align_corners=False)  # -> (batch, 128, 720, 960)
+        x = self.up4(x)  # -> (batch, 64, 720, 960)
+        x = self.conv_last(x)  # -> (batch, num_classes, 720, 960)
         return x
 
 # ---------------------------
@@ -90,13 +88,13 @@ class DetectionHead(nn.Module):
         self.num_classes = num_classes
         # Bounding box regression branch: predicts 4 values per anchor (e.g., [dx, dy, dw, dh])
         self.regression = nn.Conv2d(in_channels, num_anchors * 4, kernel_size=3, padding=1)
-        # Classification branch: predicts class scores per anchor (including background as one of the classes)
+        # Classification branch: predicts class scores per anchor (including background)
         self.classification = nn.Conv2d(in_channels, num_anchors * num_classes, kernel_size=3, padding=1)
         
     def forward(self, x):
-        # x: (batch, 512, 45, 60)
-        bbox_reg = self.regression(x)    # (batch, num_anchors*4, 45, 60)
-        cls_score = self.classification(x)  # (batch, num_anchors*num_classes, 45, 60)
+        # Input x shape: (batch, 2048, 45, 60)
+        bbox_reg = self.regression(x)    # Output: (batch, num_anchors*4, 45, 60)
+        cls_score = self.classification(x)  # Output: (batch, num_anchors*num_classes, 45, 60)
         return bbox_reg, cls_score
 
 # ---------------------------
@@ -105,30 +103,30 @@ class DetectionHead(nn.Module):
 # class MultiTaskModel(nn.Module):
 #     def __init__(self, num_classes_seg=6, num_anchors=3, num_classes_det=6):
 #         super(MultiTaskModel, self).__init__()
-#         self.backbone = Backbone()
-#         self.seg_head = SegmentationHead(in_channels=512, num_classes=num_classes_seg)
-#         self.det_head = DetectionHead(in_channels=512, num_anchors=num_anchors, num_classes=num_classes_det)
+#         self.backbone = Backbone(pretrained=True)
+#         self.seg_head = SegmentationHead(in_channels=2048, num_classes=num_classes_seg)
+#         self.det_head = DetectionHead(in_channels=2048, num_anchors=num_anchors, num_classes=num_classes_det)
         
 #     def forward(self, x):
 #         # Shared feature extraction
 #         features = self.backbone(x)
-#         # Semantic segmentation output (logits for 6 classes)
+#         # Segmentation branch
 #         seg_out = self.seg_head(features)
-#         # Detection outputs: bounding box regression and class scores
+#         # Detection branch
 #         bbox_reg, cls_score = self.det_head(features)
 #         return seg_out, bbox_reg, cls_score
     
 class MultiTaskModel(nn.Module):
     def __init__(self, num_classes_seg=6, num_anchors=3, num_classes_det=6):
         super(MultiTaskModel, self).__init__()
-        self.backbone = Backbone()
-        self.seg_head = SegmentationHead(in_channels=512, num_classes=num_classes_seg)
-        self.det_head = DetectionHead(in_channels=512, num_anchors=num_anchors, num_classes=num_classes_det)
+        self.backbone = Backbone(pretrained=True)
+        self.seg_head = SegmentationHead(in_channels=2048, num_classes=num_classes_seg)
+        self.det_head = DetectionHead(in_channels=2048, num_anchors=num_anchors, num_classes=num_classes_det)
         
     def forward(self, x):
         # Shared feature extraction
         features = self.backbone(x)
-        # Semantic segmentation output (logits for 6 classes)
+        # Segmentation branch
         seg_out = self.seg_head(features)
         return seg_out
 
