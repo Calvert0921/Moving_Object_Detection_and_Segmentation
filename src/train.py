@@ -71,7 +71,7 @@ def main():
     # Directories.
     train_images_dir = 'data/CamVid/train'
     train_masks_dir = 'data/annotations/train'
-    train_annotations_file = 'data/annotations/trian_anns.json'
+    train_annotations_file = 'data/annotations/train_anns.json'
 
     val_images_dir = 'data/CamVid/val'
     val_masks_dir = 'data/annotations/val'

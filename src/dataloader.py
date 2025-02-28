@@ -159,7 +159,7 @@ if __name__ == '__main__':
     # Test the dataloader functionality
     images_dir = 'data/CamVid/train'
     masks_dir = 'data/annotations/train'
-    annotations_file = 'data/annotations/trian_anns.json'
+    annotations_file = 'data/annotations/train_anns.json'
     
     # Define any additional transforms if necessary
     transform = transforms.Compose([
