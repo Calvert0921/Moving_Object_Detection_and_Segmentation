@@ -165,7 +165,7 @@ def main():
             class_unions[cls] += union
 
         # Show segmentation results
-        compare_seg(pred_color, gt_color_converted)
+        # compare_seg(pred_color, gt_color_converted)
 
     # Compute and print per-class IoU and average IoU (only for classes 1-5)
     print("Per-class IoU (excluding background):")

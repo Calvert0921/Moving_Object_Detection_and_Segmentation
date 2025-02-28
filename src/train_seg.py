@@ -75,13 +75,13 @@ def main():
     batch_size = 4
 
     # Directories.
-    train_images_dir = 'data/CamVid/train'
-    train_masks_dir = 'data/annotations/train'
-    train_annotations_file = 'data/annotations/train_anns.json'
+    train_images_dir = '../data/CamVid/train'
+    train_masks_dir = '../data/annotations/train'
+    train_annotations_file = '../data/annotations/train_anns.json'
 
-    val_images_dir = 'data/CamVid/val'
-    val_masks_dir = 'data/annotations/val'
-    val_annotations_file = 'data/annotations/val_anns.json'
+    val_images_dir = '../data/CamVid/val'
+    val_masks_dir = '../data/annotations/val'
+    val_annotations_file = '../data/annotations/val_anns.json'
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = MultiTaskModel()
@@ -102,7 +102,7 @@ def main():
     anchors = generate_anchors((45, 60), 16, [32, 64, 128]).to(device)
 
     best_acc = 0
-    checkpoint_dir = "weights"
+    checkpoint_dir = "../weights"
     os.makedirs(checkpoint_dir, exist_ok=True)
     checkpoint_path = os.path.join(checkpoint_dir, f"test_model.pth")
 

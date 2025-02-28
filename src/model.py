@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torchvision.models as models
+from torchvision.models import ResNet50_Weights
 
 # ---------------------------
 # Pretrained Backbone using ResNet50
@@ -12,7 +13,7 @@ class Backbone(nn.Module):
         # Use a pretrained ResNet50.
         # Set replace_stride_with_dilation=[False, False, True] so that layer4 uses dilated convolutions,
         # which helps maintain a higher resolution feature map.
-        resnet = models.resnet50(pretrained=pretrained, replace_stride_with_dilation=[False, False, True])
+        resnet = models.resnet50(weights=ResNet50_Weights.DEFAULT, replace_stride_with_dilation=[False, False, True])
         # Initial layers: conv1, bn1, relu, and maxpool.
         self.initial = nn.Sequential(
             resnet.conv1,  # Output: (batch, 64, H/2, W/2)
