@@ -79,7 +79,7 @@ def extract_bounding_boxes(segmentation_path, csv_path, target_classes, min_area
     name_without_ext = os.path.splitext(filename)[0]
     base_name = name_without_ext.split("_L")[0]
     new_filename = base_name + "_M.png"
-    save_path = os.path.join('data/annotations/val', new_filename)
+    save_path = os.path.join('train', new_filename)
     cv2.imwrite(save_path, combined_mask.astype(np.uint8))
 
     return annotations
@@ -165,16 +165,16 @@ def create_coco_json(image_dir, segmentation_dir, csv_path, target_classes, outp
         json.dump(coco, f)
 
 if __name__ == "__main__":
-    image_dir = 'data/CamVid/val'
-    label_dir = 'data/CamVid/val_labels'
-    csv_path = 'data/CamVid/class_dict.csv'
-    output_json = 'data/annotations/val_anns.json'
+    image_dir = '../CamVid/train'
+    label_dir = '../CamVid/train_labels'
+    csv_path = '../CamVid/class_dict.csv'
+    output_json = 'train_anns.json'
 
     target_classes = {1: 'Car', 2: 'Pedestrian', 3: 'Bicyclist', 4: 'MotorcycleScooter', 5: 'Truck_Bus'}
 
-    test_path = 'data/CamVid/train_labels/0001TP_009210_L.png'
+    # test_path = 'data/CamVid/train_labels/0001TP_009210_L.png'
 
     # anns = extract_bounding_boxes(test_path, csv_path, target_classes)
     # print(anns)
     # visualize_bbox(test_path, anns, target_classes)
-    # create_coco_json(image_dir, label_dir, csv_path, target_classes, output_json)
+    create_coco_json(image_dir, label_dir, csv_path, target_classes, output_json)
