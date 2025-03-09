@@ -35,7 +35,14 @@ project_ZhizhouFang/
 ```
 
 ## To install all the dependencies:
-### Run following command to create new environment
+### 1. Run following command to create new environment
 ```bash
 conda create --name object python=3.10
+```
+
+### 2. Install the suitable pytorch version
+
+### 3. Run following script to install all necessary libraries
+```bash
+pip3 install -r requirements.txt
 ```
