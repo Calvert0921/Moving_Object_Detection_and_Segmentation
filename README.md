@@ -46,3 +46,35 @@ conda create --name object python=3.10
 ```bash
 pip3 install -r requirements.txt
 ```
+
+## To prepare the dataset:
+### 1. Download CamVid dataset under data directory
+
+### 2. Data augmentation
+```bash
+cd src
+python3 data_aug.py
+```
+
+### 3. Generating annotations
+```bash
+cd data/annotations
+python3 gene_ann.py
+```
+
+## To train the model:
+```bash
+cd src
+python3 train.py
+```
+
+## To test the model(make sure you have correct model under "weights"):
+### Testing on both segmentation and detection
+```bash
+python3 test.py
+```
+
+### Or testing only on segmentation
+```bash
+python3 test_seg.py
+```
