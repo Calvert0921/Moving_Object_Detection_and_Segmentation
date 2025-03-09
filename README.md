@@ -1,5 +1,6 @@
 # Moving_Object_Detection_and_Segmentation
 
+```bash
 project_ZhizhouFang/
 ├── data/
 │   ├── CamVid/
@@ -30,7 +31,7 @@ project_ZhizhouFang/
 ├── results/                # Predictions, plots
 ├── requirements.txt        # Conda / pip environment specs
 └── README.md               # Setup / usage instructions
-
+```
 
 conda create --name object python=3.10
 
