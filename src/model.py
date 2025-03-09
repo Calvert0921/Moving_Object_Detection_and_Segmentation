@@ -101,22 +101,6 @@ class DetectionHead(nn.Module):
 # ---------------------------
 # Multi-Task Model: Combines Backbone with Both Heads
 # ---------------------------
-# class MultiTaskModel(nn.Module):
-#     def __init__(self, num_classes_seg=6, num_anchors=3, num_classes_det=6):
-#         super(MultiTaskModel, self).__init__()
-#         self.backbone = Backbone(pretrained=True)
-#         self.seg_head = SegmentationHead(in_channels=2048, num_classes=num_classes_seg)
-#         self.det_head = DetectionHead(in_channels=2048, num_anchors=num_anchors, num_classes=num_classes_det)
-        
-#     def forward(self, x):
-#         # Shared feature extraction
-#         features = self.backbone(x)
-#         # Segmentation branch
-#         seg_out = self.seg_head(features)
-#         # Detection branch
-#         bbox_reg, cls_score = self.det_head(features)
-#         return seg_out, bbox_reg, cls_score
-    
 class MultiTaskModel(nn.Module):
     def __init__(self, num_classes_seg=6, num_anchors=3, num_classes_det=6):
         super(MultiTaskModel, self).__init__()
@@ -129,7 +113,9 @@ class MultiTaskModel(nn.Module):
         features = self.backbone(x)
         # Segmentation branch
         seg_out = self.seg_head(features)
-        return seg_out
+        # Detection branch
+        bbox_reg, cls_score = self.det_head(features)
+        return seg_out, bbox_reg, cls_score
 
 # ---------------------------
 # Testing the Model Architecture

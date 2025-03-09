@@ -106,15 +106,23 @@ def nms(boxes, scores, iou_threshold=0.5):
     """
     if boxes.numel() == 0:
         return torch.empty((0,), dtype=torch.long)
+    
+    # If boxes is 1D, unsqueeze to (1,4)
+    if boxes.dim() == 1:
+        boxes = boxes.unsqueeze(0)
+        scores = scores.unsqueeze(0)
+    
     x1 = boxes[:, 0]
     y1 = boxes[:, 1]
     x2 = boxes[:, 2]
     y2 = boxes[:, 3]
     areas = (x2 - x1) * (y2 - y1)
+    
     _, order = scores.sort(descending=True)
-    # Ensure 'order' is a 1D tensor.
+    # Ensure 'order' is 1D.
     if order.dim() == 0:
         order = order.unsqueeze(0)
+    
     keep = []
     while order.numel() > 0:
         i = order[0].item()
@@ -131,12 +139,18 @@ def nms(boxes, scores, iou_threshold=0.5):
         inter = inter_w * inter_h
         iou = inter / (areas[i] + areas[order] - inter + 1e-6)
         inds = (iou <= iou_threshold).nonzero(as_tuple=False).squeeze()
-        if inds.numel() == 0:
-            break
+        # Ensure inds is 1D even when only one element is present.
         if inds.dim() == 0:
             inds = inds.unsqueeze(0)
+        if inds.numel() == 0:
+            break
         order = order[inds]
+        if order.dim() == 0:
+            order = order.unsqueeze(0)
     return torch.tensor(keep, dtype=torch.long)
+
+
+
 
 
 ##########################################

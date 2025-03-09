@@ -2,7 +2,7 @@ import os
 import cv2
 import numpy as np
 
-def find_images_with_color(directory, target_color=(64, 0, 128)):
+def find_images_with_color(directory, target_color=(192, 128, 192)):
     found_images = []
     count = 0
     
@@ -32,6 +32,5 @@ def find_images_with_color(directory, target_color=(64, 0, 128)):
     print(f"Number of images: {count}")
     return found_images
 
-# Example usage
-directory_path = "data/CamVid/train_labels"  # Change this to your actual directory
+directory_path = "data/CamVid/test_labels"
 find_images_with_color(directory_path)

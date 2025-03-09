@@ -3,9 +3,8 @@ import os
 import cv2
 import numpy as np
 import csv
-import matplotlib.pyplot as plt
 
-def extract_bounding_boxes(segmentation_path, csv_path, target_classes, min_area=10):
+def extract_bounding_boxes(segmentation_path, csv_path, target_classes, mask_save_dir, min_area=10):
     """
     Extract bounding boxes from a segmentation image where each pixel is represented by (R,G,B).
 
@@ -13,9 +12,10 @@ def extract_bounding_boxes(segmentation_path, csv_path, target_classes, min_area
         segmentation_path (str): Path to the RGB segmentation image.
         csv_path (str): Path to the CSV file containing class RGB mappings.
                         Expected CSV format: headers 'name', 'r', 'g', 'b'.
-        target_classes (set or list): Only process classes whose names are in this set.
+        target_classes (dict): Mapping of class IDs to class names.
+        mask_save_dir (str): Directory where the combined mask image will be saved.
         min_area (int): Minimum area for a contour to be considered (to filter out noise).
-        
+
     Returns:
         annotations (list): A list of dictionaries with keys:
             'bbox'         : [x, y, width, height]
@@ -36,27 +36,29 @@ def extract_bounding_boxes(segmentation_path, csv_path, target_classes, min_area
         reader = csv.DictReader(csvfile)
         for row in reader:
             class_name = str(row['name'])
+            # Check if this class name is one of our target classes
             if class_name in target_classes.values():
                 r = int(row['r'])
                 g = int(row['g'])
                 b = int(row['b'])
-                for k, v in target_classes.items():
-                    if v == class_name:
-                        rgb_mapping[(r, g, b)] = k
+                # Find the corresponding key for this class name
+                for key, val in target_classes.items():
+                    if val == class_name:
+                        rgb_mapping[(r, g, b)] = key
     
     annotations = []
     
-    # Iterate over each target RGB value and create a binary mask
-    combined_mask = np.zeros([720, 960])
-    for rgb, new_class in rgb_mapping.items():
+    # Create a combined mask (assumes image size 720x960; adjust as needed)
+    combined_mask = np.zeros([seg.shape[0], seg.shape[1]])
+    for rgb, class_id in rgb_mapping.items():
         r_val, g_val, b_val = rgb
         # Create binary mask where pixels exactly match the RGB value
         matched_mask = ((seg[:, :, 0] == r_val) & 
-                (seg[:, :, 1] == g_val) & 
-                (seg[:, :, 2] == b_val))
+                        (seg[:, :, 1] == g_val) & 
+                        (seg[:, :, 2] == b_val))
         
-        # Combine masks together, ignore rest classes
-        combined_mask[matched_mask] = new_class
+        # Update the combined mask with the class id
+        combined_mask[matched_mask] = class_id
 
         mask = matched_mask.astype(np.uint8) * 255
         
@@ -68,58 +70,42 @@ def extract_bounding_boxes(segmentation_path, csv_path, target_classes, min_area
             x, y, w, h = cv2.boundingRect(contour)
             annotation = {
                 'bbox': [x, y, w, h],  # COCO expects [x, y, width, height]
-                'category_id': new_class,
+                'category_id': class_id,
                 'area': w * h,
                 'iscrowd': 0
             }
             annotations.append(annotation)
 
-    # Save the mask
+    # Save the combined mask in the specified directory
+    os.makedirs(mask_save_dir, exist_ok=True)
     filename = os.path.basename(segmentation_path)
     name_without_ext = os.path.splitext(filename)[0]
     base_name = name_without_ext.split("_L")[0]
     new_filename = base_name + "_M.png"
-    save_path = os.path.join('train', new_filename)
+    save_path = os.path.join(mask_save_dir, new_filename)
     cv2.imwrite(save_path, combined_mask.astype(np.uint8))
 
     return annotations
 
-def visualize_bbox(image_path, anns, target_classes):
-    # Load the original image
-    image = cv2.imread(image_path)
-    # Convert from BGR (OpenCV default) to RGB for proper display with matplotlib
-    image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+def create_coco_json(image_dir, segmentation_dir, csv_path, target_classes, output_json, mask_save_dir):
+    """
+    Create a COCO-style JSON file for a given dataset split.
 
-    # Example list of bounding boxes, where each entry is a dict containing a 'bbox' and a 'category_id'
-    # For example: [{'bbox': [x, y, w, h], 'category_id': 2}, ...]
-    # Replace this with the output from your extract_bounding_boxes function.
-    boxes = []
-    for ann in anns:
-        boxes.append({'bbox': ann['bbox'], 'category': target_classes[ann['category_id']]})
-
-    # Draw each bounding box on the image
-    for box in boxes:
-        x, y, w, h = box['bbox']
-        # Draw the rectangle. Color is in RGB (e.g., red here is (255, 0, 0)), thickness is 2.
-        cv2.rectangle(image_rgb, (x, y), (x + w, y + h), color=(255, 0, 0), thickness=2)
-        # Optionally, put the category id on the image
-        cv2.putText(image_rgb, str(box['category']), (x, y - 10),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.9, (255, 0, 0), 2)
-
-    # Display the image using matplotlib
-    plt.figure(figsize=(10, 8))
-    plt.imshow(image_rgb)
-    plt.axis('off')  # Hide axis
-    plt.show()
-
-def create_coco_json(image_dir, segmentation_dir, csv_path, target_classes, output_json):
+    Parameters:
+        image_dir (str): Directory containing original images.
+        segmentation_dir (str): Directory containing segmentation labels.
+        csv_path (str): CSV file mapping class names to RGB values.
+        target_classes (dict): Mapping of class IDs to class names.
+        output_json (str): Output JSON file name.
+        mask_save_dir (str): Directory where combined mask images will be saved.
+    """
     coco = {
         "images": [],
         "annotations": [],
         "categories": []
     }
     
-    # Define categories for the 5 target classes
+    # Define categories for the target classes
     for class_id in target_classes.keys():
         coco["categories"].append({
             "id": class_id,
@@ -129,15 +115,16 @@ def create_coco_json(image_dir, segmentation_dir, csv_path, target_classes, outp
     annotation_id = 1
     image_id = 1
     
-    # Loop through each image file (assuming segmentation files have the same name)
+    # Loop through each image file (assuming corresponding segmentation files exist)
     for file_name in os.listdir(image_dir):
         if not file_name.endswith(('.png', '.jpg')):
             continue
-        name, ext = os.path.splitext(file_name)  # Splits into 'name' and '.png'
-        seg_file_name = f"{name}_L{ext}"  # Creates 'name_L.png'
+        name, ext = os.path.splitext(file_name)
+        seg_file_name = f"{name}_L{ext}"  # Assumes segmentation files are named like 'image_L.png'
         image_path = os.path.join(image_dir, file_name)
         seg_path = os.path.join(segmentation_dir, seg_file_name)
-        print(seg_path)
+        
+        print(f"Processing segmentation file: {seg_path}")
         
         # Read image to get width and height
         image = cv2.imread(image_path)
@@ -151,7 +138,7 @@ def create_coco_json(image_dir, segmentation_dir, csv_path, target_classes, outp
         })
         
         # Extract bounding boxes from the segmentation mask
-        annots = extract_bounding_boxes(seg_path, csv_path, target_classes)
+        annots = extract_bounding_boxes(seg_path, csv_path, target_classes, mask_save_dir)
         for ann in annots:
             ann["id"] = annotation_id
             ann["image_id"] = image_id
@@ -160,21 +147,52 @@ def create_coco_json(image_dir, segmentation_dir, csv_path, target_classes, outp
         
         image_id += 1
     
-    # Write out to a JSON file
+    # Write out the annotations to a JSON file
     with open(output_json, 'w') as f:
         json.dump(coco, f)
+    print(f"Saved COCO annotations to {output_json}")
 
 if __name__ == "__main__":
-    image_dir = '../CamVid/train'
-    label_dir = '../CamVid/train_labels'
+    # Define your CSV file and target classes mapping
     csv_path = '../CamVid/class_dict.csv'
-    output_json = 'train_anns.json'
-
-    target_classes = {1: 'Car', 2: 'Pedestrian', 3: 'Bicyclist', 4: 'MotorcycleScooter', 5: 'Truck_Bus'}
-
-    # test_path = 'data/CamVid/train_labels/0001TP_009210_L.png'
-
-    # anns = extract_bounding_boxes(test_path, csv_path, target_classes)
-    # print(anns)
-    # visualize_bbox(test_path, anns, target_classes)
-    create_coco_json(image_dir, label_dir, csv_path, target_classes, output_json)
+    target_classes = {
+        1: 'Car',
+        2: 'Pedestrian',
+        3: 'Bicyclist',
+        4: 'MotorcycleScooter',
+        5: 'Truck_Bus'
+    }
+    
+    # Define the dataset splits and their directories
+    splits = {
+        "train": {
+            "image_dir": "../CamVid/train",
+            "segmentation_dir": "../CamVid/train_labels",
+            "mask_save_dir": "../CamVid/train_masks",
+            "output_json": "train_anns.json"
+        },
+        "val": {
+            "image_dir": "../CamVid/val",
+            "segmentation_dir": "../CamVid/val_labels",
+            "mask_save_dir": "../CamVid/val_masks",
+            "output_json": "val_anns.json"
+        },
+        "test": {
+            "image_dir": "../CamVid/test",
+            "segmentation_dir": "../CamVid/test_labels",
+            "mask_save_dir": "../CamVid/test_masks",
+            "output_json": "test_anns.json"
+        }
+    }
+    
+    # Loop over each split and generate the COCO JSON annotations
+    for split, paths in splits.items():
+        print(f"\n=== Generating annotations for {split} split ===")
+        create_coco_json(
+            image_dir=paths["image_dir"],
+            segmentation_dir=paths["segmentation_dir"],
+            csv_path=csv_path,
+            target_classes=target_classes,
+            output_json=paths["output_json"],
+            mask_save_dir=paths["mask_save_dir"]
+        )
